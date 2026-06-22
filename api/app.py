@@ -5,27 +5,35 @@ import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)
 
 app = Flask(__name__)
 CORS(app)
 
 try:
-    model = joblib.load("models/xgb_model.pkl")
-    preprocessor = joblib.load("models/preprocessor.pkl")
+    model = joblib.load(os.path.join(BASE_DIR, "models", "xgb_model.pkl"))
+    preprocessor = joblib.load(os.path.join(BASE_DIR, "models", "preprocessor.pkl"))
     print("✅ Models loaded!")
-except:
+except Exception as e:
     model = None
     preprocessor = None
+    print(f"❌ Failed to load models: {e}")
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    if model is None or preprocessor is None:
+        return jsonify({"error": "Model not loaded on server"}), 503
     data = request.get_json()
     input_df = pd.DataFrame([data])
     X_transformed = preprocessor.transform(input_df)
     prob = model.predict_proba(X_transformed)[0][1]
     risk = "High" if prob >= 0.65 else "Moderate" if prob >= 0.35 else "Low"
     return jsonify({"probability": round(float(prob), 4), "risk_level": risk})
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok", "model_loaded": model is not None})
 
 @app.route('/')
 def home():
